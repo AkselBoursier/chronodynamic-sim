@@ -22,6 +22,8 @@ from pathlib import Path
 import time
 import numpy as np
 
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from core.chronodynamic_tensor import ChronodynamicTensor, CosmologicalParams
 from observational.cmb_predictions import CMBPredictor, CMBConfig
@@ -142,7 +144,7 @@ def run_tensor_computation(config: dict, output_dir: Path) -> ChronodynamicTenso
             'x': x.tolist(),
             'C_components': C.tolist(),
             'trace': trace,
-            'conserved': bool(is_conserved)
+            'conserved': is_conserved
         }
     
     # Save tensor data
@@ -152,7 +154,7 @@ def run_tensor_computation(config: dict, output_dir: Path) -> ChronodynamicTenso
             json.dump(tensor_data, f, indent=2)
         logger.info("Tensor data saved")
     
-    return tensor, tensor_data
+    return tensor
 
 
 def run_cmb_predictions(tensor: ChronodynamicTensor, config: dict, output_dir: Path) -> dict:
@@ -341,15 +343,14 @@ def main():
     logger.info(f"Output directory: {args.output}")
     
     # Load configuration
-    config_file_path = Path(__file__).resolve().parent.parent / args.config
-    config = load_config(config_file_path)
+    config = load_config(args.config)
     
     # Set up output directory
     output_dir = setup_output_directory(args.output)
     
     try:
         # Run tensor computation
-        tensor, tensor_results = run_tensor_computation(config, output_dir)
+        tensor = run_tensor_computation(config, output_dir)
         
         # Run CMB predictions
         cmb_data = run_cmb_predictions(tensor, config, output_dir)
@@ -361,6 +362,7 @@ def main():
             mcmc_data = {'parameter_stats': {}, 'convergence': {'converged': True}}
         
         # Generate summary report
+        tensor_results = {}  # Would load from saved file
         generate_summary_report(tensor_results, cmb_data, mcmc_data, output_dir)
         
         logger.info("Simulation completed successfully!")

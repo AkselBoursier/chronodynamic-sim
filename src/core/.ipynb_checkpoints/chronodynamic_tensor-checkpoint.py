@@ -253,7 +253,7 @@ class ChronodynamicTensor:
             T_xx = (self.T_function(tau, x_plus) - 2*T_val + 
                    self.T_function(tau, x_minus)) / h**2
             
-            Cij = self.params.S_chrono * T_xx / T_val
+            Cii = self.params.S_chrono * T_xx / T_val
         else:
             # Off-diagonal components (mixed derivatives)
             h = 1e-6

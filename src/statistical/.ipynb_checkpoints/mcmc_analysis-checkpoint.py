@@ -152,9 +152,9 @@ class ChronodynamicLikelihood:
             return self.theory_cache[cache_key]
         
         # Import chronodynamic modules
-        from core.chronodynamic_tensor import CosmologicalParams, ChronodynamicTensor
-        from observational.cmb_predictions import CMBPredictor
-        from observational.distance_redshift import DistanceCalculator
+        from ..core.chronodynamic_tensor import CosmologicalParams, ChronodynamicTensor
+        from ..observational.cmb_predictions import CMBPredictor
+        from ..observational.distance_redshift import DistanceCalculator
         
         # Set up parameters
         Omega_m, Omega_lambda, H0, S_chrono, T0_scale, q0, j0 = theta
