@@ -1,0 +1,4 @@
+[console_scripts]
+ccd-dashboard = chronodynamic_sim.visualization.interactive_dashboard:main
+ccd-mcmc = chronodynamic_sim.scripts.run_mcmc:main
+chronodynamic-sim = chronodynamic_sim.cli:main
