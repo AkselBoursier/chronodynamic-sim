@@ -62,7 +62,8 @@ class ChronodynamicTransferFunction:
         evolution = ChronodynamicEvolution(self.tensor)
         
         tau_ini = 1e-5
-        tau_today = 3 * self._conformal_time_at_recombination() # Rough estimate of today
+        # A rough estimate of tau_today to ensure the integration range is sufficient
+        tau_today = 3 * (2 * 299792.458 / (self.params.H0 * np.sqrt(self.params.Omega_m)) * np.sqrt(1.0 / (1.0 + self.config.z_recombination)))
         tau_span = (tau_ini, tau_today)
         
         a_ini = tau_ini 
@@ -207,3 +208,149 @@ class ChronodynamicTransferFunction:
         a = self._scale_factor(tau)
         if a == 0: return np.inf
         return 1.0/a - 1.0
+
+class CMBPredictor:
+    """
+    Main class for computing CMB power spectra in chronodynamic cosmology.
+    """
+    
+    def __init__(self, chronodynamic_tensor, config: CMBConfig = None):
+        self.tensor = chronodynamic_tensor
+        self.config = config or CMBConfig()
+        self.transfer = ChronodynamicTransferFunction(chronodynamic_tensor, config)
+        
+        self.l_array = np.arange(2, self.config.l_max + 1)
+        
+        logger.info("Initialized CMBPredictor")
+    
+    def compute_power_spectra(self) -> Dict[str, np.ndarray]:
+        """
+        Compute temperature and polarization power spectra.
+        """
+        logger.info("Computing CMB power spectra")
+        
+        C_l_TT = np.zeros(len(self.l_array))
+        C_l_TE = np.zeros(len(self.l_array))
+        C_l_EE = np.zeros(len(self.l_array))
+        
+        for i, k in enumerate(self.transfer.k_array):
+            if i % 20 == 0:
+                logger.info(f"Processing k mode {i+1}/{len(self.transfer.k_array)}")
+            
+            try:
+                perturbations = self.transfer.solve_perturbation_equations(k)
+            except Exception as e:
+                logger.warning(f"Skipping k={k} due to error: {e}")
+                continue
+            
+            tau_rec = perturbations['tau'][-1]
+            delta_gamma_rec = perturbations['delta_gamma'][-1]
+            theta_gamma_rec = perturbations['theta_gamma'][-1]
+            phi_rec = perturbations['phi'][-1]
+            
+            S_T = delta_gamma_rec / 4 + phi_rec
+            S_E = theta_gamma_rec / k
+            
+            for j, l in enumerate(self.l_array):
+                chi_rec = self._comoving_distance_recombination()
+                x = k * chi_rec
+                j_l = self._spherical_bessel(l, x)
+                P_k = self._primordial_power_spectrum(k)
+                dk = np.diff(self.transfer.k_array)[0] if i < len(self.transfer.k_array)-1 else 0.01
+                
+                C_l_TT[j] += P_k * S_T**2 * j_l**2 * dk
+                C_l_TE[j] += P_k * S_T * S_E * j_l**2 * dk  
+                C_l_EE[j] += P_k * S_E**2 * j_l**2 * dk
+        
+        T_CMB = 2.725e6
+        C_l_TT *= T_CMB**2 * (2*np.pi)**2
+        C_l_TE *= T_CMB**2 * (2*np.pi)**2
+        C_l_EE *= T_CMB**2 * (2*np.pi)**2
+        
+        l_factor = self.l_array * (self.l_array + 1) / (2 * np.pi)
+        
+        return {
+            'l': self.l_array,
+            'TT': C_l_TT * l_factor,
+            'TE': C_l_TE * l_factor,
+            'EE': C_l_EE * l_factor
+        }
+    
+    def _comoving_distance_recombination(self) -> float:
+        z_rec = self.config.z_recombination
+        H0 = self.tensor.params.H0
+        c = 299792.458
+        chi_rec = c / H0 * 2 * np.sqrt(1 + z_rec)
+        return chi_rec
+    
+    def _spherical_bessel(self, l: int, x: float) -> float:
+        from scipy.special import spherical_jn
+        return spherical_jn(l, x)
+    
+    def _primordial_power_spectrum(self, k: float) -> float:
+        A_s = 2.1e-9
+        n_s = 0.965
+        k_pivot = 0.05
+        return A_s * (k / k_pivot)**(n_s - 1)
+    
+    def compute_chronodynamic_signatures(self) -> Dict[str, np.ndarray]:
+        logger.info("Computing chronodynamic signatures")
+        
+        C_l_standard = self._compute_standard_cmb()
+        C_l_ccd = self.compute_power_spectra()
+        
+        signatures = {
+            'l': self.l_array,
+            'delta_TT': C_l_ccd['TT'] - C_l_standard['TT'],
+            'ratio_TT': C_l_ccd['TT'] / C_l_standard['TT'],
+            'delta_TE': C_l_ccd['TE'] - C_l_standard['TE'],
+            'ratio_TE': C_l_ccd['TE'] / C_l_standard['TE']
+        }
+        
+        signatures['peak_shifts'] = self._detect_peak_shifts(C_l_ccd, C_l_standard)
+        signatures['amplitude_changes'] = self._detect_amplitude_changes(C_l_ccd, C_l_standard)
+        
+        return signatures
+    
+    def _compute_standard_cmb(self) -> Dict[str, np.ndarray]:
+        l_array = self.l_array
+        C_l_TT_std = 6000 * np.exp(-(l_array - 220)**2 / (2 * 50**2))
+        C_l_TT_std += 3000 * np.exp(-(l_array - 540)**2 / (2 * 40**2))
+        C_l_TT_std += 1500 * np.exp(-(l_array - 800)**2 / (2 * 35**2))
+        damping = np.exp(-(l_array / 1000)**2)
+        C_l_TT_std *= damping
+        C_l_TE_std = 0.3 * C_l_TT_std
+        C_l_EE_std = 0.1 * C_l_TT_std
+        return {
+            'l': l_array, 'TT': C_l_TT_std, 'TE': C_l_TE_std, 'EE': C_l_EE_std
+        }
+    
+    def _detect_peak_shifts(self, C_l_ccd: Dict, C_l_standard: Dict) -> Dict:
+        from scipy.signal import find_peaks
+        peaks_std, _ = find_peaks(C_l_standard['TT'], height=1000, distance=100)
+        peaks_ccd, _ = find_peaks(C_l_ccd['TT'], height=1000, distance=100)
+        peak_shifts = []
+        if len(peaks_std) > 0 and len(peaks_ccd) > 0:
+            for i in range(min(len(peaks_std), len(peaks_ccd))):
+                l_std = self.l_array[peaks_std[i]]
+                l_ccd = self.l_array[peaks_ccd[i]]
+                shift = (l_ccd - l_std) / l_std
+                peak_shifts.append(shift)
+        return {
+            'peaks_standard': peaks_std, 'peaks_ccd': peaks_ccd, 'relative_shifts': peak_shifts
+        }
+    
+    def _detect_amplitude_changes(self, C_l_ccd: Dict, C_l_standard: Dict) -> Dict:
+        l_ranges = {
+            'low_l': (2, 50), 'first_peak': (150, 300),
+            'second_peak': (400, 600), 'damping_tail': (1000, 2000)
+        }
+        amplitude_changes = {}
+        for range_name, (l_min, l_max) in l_ranges.items():
+            mask = (self.l_array >= l_min) & (self.l_array <= l_max)
+            if np.any(mask):
+                mean_std = np.mean(C_l_standard['TT'][mask])
+                mean_ccd = np.mean(C_l_ccd['TT'][mask])
+                relative_change = (mean_ccd - mean_std) / mean_std
+                amplitude_changes[range_name] = relative_change
+        return amplitude_changes
