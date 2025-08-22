@@ -57,7 +57,7 @@ class ChronodynamicTransferFunction:
         interpolation functions for them.
         """
         logger.info("Pre-computing background cosmology...")
-        from chronodynamic_sim.core.chronodynamic_tensor import ChronodynamicEvolution
+        from ..core.chronodynamic_tensor import ChronodynamicEvolution
         
         evolution = ChronodynamicEvolution(self.tensor)
         
