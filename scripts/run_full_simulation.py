@@ -106,7 +106,7 @@ def setup_output_directory(output_dir: str) -> Path:
     return output_path
 
 
-def run_tensor_computation(config: dict, output_dir: Path) -> ChronodynamicTensor:
+def run_tensor_computation(config: dict, output_dir: Path) -> tuple:
     """Run chronodynamic tensor computation"""
     logger.info("Starting chronodynamic tensor computation")
     

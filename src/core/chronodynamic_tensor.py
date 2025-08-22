@@ -14,8 +14,6 @@ Date: August 2025
 """
 
 import numpy as np
-import jax.numpy as jnp
-from jax import grad, jacfwd, jacrev
 from typing import Tuple, Dict, Callable, Optional
 from dataclasses import dataclass
 import logging
@@ -110,9 +108,9 @@ class ChronodynamicTensor:
         a_double_prime = self._compute_scale_factor_second_derivative(tau, a)
         
         return {
-            'a_prime': a_prime,
-            'a_double_prime': a_double_prime,
-            'H_conformal': a_prime / a  # Conformal Hubble parameter
+            'a_prime': np.array(a_prime),
+            'a_double_prime': np.array(a_double_prime),
+            'H_conformal': np.array(a_prime / a)  # Conformal Hubble parameter
         }
     
     def _compute_scale_factor_derivative(self, tau: float, a: float) -> float:
